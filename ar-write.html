@@ -1,338 +1,123 @@
-<html>
-<head>
-  <base href="https://www.webrtc-experiment.com/DetectRTC/">
-  <meta charset="UTF-8">
-  <title>AR Handwriting Practice</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      margin: 0;
-      overflow: hidden;
+<script>
+  const video = document.getElementById('video');
+  const overlay = document.getElementById('overlay');
+  const pngUpload = document.getElementById('pngUpload');
+  const scaleSlider = document.getElementById('scaleSlider');
+  const xPositionSlider = document.getElementById('xPositionSlider');
+  const yPositionSlider = document.getElementById('yPositionSlider');
+  const opacitySlider = document.getElementById('opacitySlider');
+  const rotationSlider = document.getElementById('rotationSlider');
+  const cameraSelect = document.getElementById('cameraSelect');
+  const toggleControls = document.getElementById('toggleControls');
+  const toggleInstructions = document.getElementById('toggleInstructions');
+  const toggleTextInput = document.getElementById('toggleTextInput');
+  const clearOverlay = document.getElementById('clearOverlay');
+  const controls = document.getElementById('controls');
+  const instructions = document.getElementById('instructions');
+  const textInput = document.getElementById('textInput');
+  const fontSelect = document.getElementById('fontSelect');
+  const addTextButton = document.getElementById('addTextButton');
+  const textInputContainer = document.getElementById('textInputContainer');
+  
+  let stream = null;
+  let draggableImg = null;
+  let textOverlay = null;
+
+  function updateImagePosition() {
+    if (draggableImg) {
+      const overlayRect = overlay.getBoundingClientRect();
+      const maxX = overlayRect.width - draggableImg.offsetWidth * scaleSlider.value;
+      const maxY = overlayRect.height - draggableImg.offsetHeight * scaleSlider.value;
+
+      const translateX = (xPositionSlider.value / 100) * maxX;
+      const translateY = (yPositionSlider.value / 100) * maxY;
+      const rotation = rotationSlider.value;
+
+      draggableImg.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scaleSlider.value}) rotate(${rotation}deg)`;
+      draggableImg.style.opacity = opacitySlider.value;
     }
+    if (textOverlay) {
+      const overlayRect = overlay.getBoundingClientRect();
+      const maxX = overlayRect.width - textOverlay.clientWidth * scaleSlider.value;
+      const maxY = overlayRect.height - textOverlay.clientHeight * scaleSlider.value;
 
-    #video {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      z-index: -1;
+      const translateX = (xPositionSlider.value / 100) * maxX;
+      const translateY = (yPositionSlider.value / 100) * maxY;
+      const rotation = rotationSlider.value;
+
+      textOverlay.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scaleSlider.value}) rotate(${rotation}deg)`;
+      textOverlay.style.opacity = opacitySlider.value;
+      textOverlay.style.fontSize = '200px';
     }
+  }
 
-    #overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-    }
+  function getCameras() {
+    navigator.mediaDevices.enumerateDevices()
+      .then(devices => {
+        cameraSelect.innerHTML = '';
 
-    .charOverlay, .textOverlay {
-      position: absolute;
-      color: rgba(255, 0, 0, 0.5);
-      font-size: 3em;
-      user-select: none;
-      white-space: nowrap;
-    }
+        const rearCamera = devices.find(device => device.kind === 'videoinput' && device.label.toLowerCase().includes('back'));
 
-    #upload-container {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      z-index: 10;
-      background-color: rgba(255, 255, 255, 0.7);
-      padding: 10px;
-      border-radius: 5px;
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-      align-items: start;
-    }
-
-    .button-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 5px;
-      margin-bottom: 5px;
-    }
-
-    #controls, #instructions {
-      position: absolute;
-      z-index: 10;
-      background-color: rgba(255, 255, 255, 0.7);
-      padding: 5px;
-      border-radius: 5px;
-    }
-
-    #controls {
-      top: 150px;
-      left: 10px;
-    }
-
-    #instructions {
-      display: none;
-      bottom: 10px;
-      left: 10px;
-      right: 10px;
-      padding: 10px;
-      width: 300px;
-    }
-
-    img.draggable, .textOverlay {
-      position: absolute;
-      cursor: grab;
-      transform-origin: left top;
-      z-index: 5;
-      opacity: 0.5;
-      width: 200px;
-    }
-
-    img.draggable:active, .textOverlay:active {
-      cursor: grabbing;
-    }
-
-    .hidden {
-      display: none;
-    }
-
-    #textInputContainer {
-      margin-top: 5px;
-    }
-
-    button, select, label, input {
-      margin: 3px;
-    }
-
-    .available-fonts {
-      font-family: Arial, 'Courier New', 'Times New Roman', 'Microsoft JhengHei', 'SimSun', 'MingLiU', 'DFKai-SB';
-    }
-  </style>
-</head>
-<body>
-  <video id="video" autoplay playsinline></video>
-  <div id="overlay"></div>
-  <div id="upload-container">
-    <div class="button-row">
-      <button id="toggleInstructions">說明</button>
-      <button id="clearOverlay">清空</button>
-      <select id="cameraSelect"></select>
-    </div>
-    <div class="button-row">
-      <button id="toggleControls">設定</button>
-      <button id="toggleTextInput">文字</button>
-      <input type="file" id="pngUpload" accept="image/png" title="上傳">
-    </div>
-    <div id="textInputContainer" class="hidden">
-      <input type="text" id="textInput" placeholder="文字" value="新增文字">
-      <select id="fontSelect">
-        <option value="Arial">Arial</option>
-        <option value="'Courier New'">Courier New</option>
-        <option value="'Times New Roman'">Times New Roman</option>
-        <option value="'Microsoft JhengHei'">微軟正黑體</option>
-        <option value="'SimSun'">宋体</option>
-        <option value="'MingLiU'">細明體</option>
-        <option value="'DFKai-SB'">標楷體</option>
-      </select>
-      <button id="addTextButton">新增文字</button>
-    </div>
-  </div>
-  <div id="controls" class="hidden">
-    <input type="range" id="scaleSlider" min="0.1" max="5" step="0.1" value="1">
-    <label for="scaleSlider">調整大小</label><br>
-    <input type="range" id="xPositionSlider" min="0" max="100" step="1" value="0" style="width: 200px;">
-    <label for="xPositionSlider">水平位置</label><br>
-    <input type="range" id="yPositionSlider" min="0" max="100" step="1" value="50" style="width: 200px;">
-    <label for="yPositionSlider">垂直位置</label><br>
-    <input type="range" id="opacitySlider" min="0.1" max="1" step="0.1" value="0.5">
-    <label for="opacitySlider">透明度</label><br>
-    <input type="range" id="rotationSlider" min="0" max="360" step="90" value="0">
-    <label for="rotationSlider">旋轉角度(以90度為單位)</label><br>
-  </div>
-  <div id="instructions" class="hidden">
-    <h3>操作說明</h3>
-    <p>1.上傳PNG圖片作為範本或輸入文字。</p>
-    <p>2.使用滑桿調整範本大小、位置和角度。</p>
-    <p>3.透過鏡頭查看並練習。</p>
-  </div>
-
-  <script>
-    const video = document.getElementById('video');
-    const overlay = document.getElementById('overlay');
-    const pngUpload = document.getElementById('pngUpload');
-    const scaleSlider = document.getElementById('scaleSlider');
-    const xPositionSlider = document.getElementById('xPositionSlider');
-    const yPositionSlider = document.getElementById('yPositionSlider');
-    const opacitySlider = document.getElementById('opacitySlider');
-    const rotationSlider = document.getElementById('rotationSlider');
-    const cameraSelect = document.getElementById('cameraSelect');
-    const toggleControls = document.getElementById('toggleControls');
-    const toggleInstructions = document.getElementById('toggleInstructions');
-    const toggleTextInput = document.getElementById('toggleTextInput');
-    const clearOverlay = document.getElementById('clearOverlay');
-    const controls = document.getElementById('controls');
-    const instructions = document.getElementById('instructions');
-    const textInput = document.getElementById('textInput');
-    const fontSelect = document.getElementById('fontSelect');
-    const addTextButton = document.getElementById('addTextButton');
-    const textInputContainer = document.getElementById('textInputContainer');
-    
-    let stream = null;
-    let draggableImg = null;
-    let textOverlay = null;
-
-    function updateImagePosition() {
-      if (draggableImg) {
-        const overlayRect = overlay.getBoundingClientRect();
-        const maxX = overlayRect.width - draggableImg.offsetWidth * scaleSlider.value;
-        const maxY = overlayRect.height - draggableImg.offsetHeight * scaleSlider.value;
-
-        const translateX = (xPositionSlider.value / 100) * maxX;
-        const translateY = (yPositionSlider.value / 100) * maxY;
-        const rotation = rotationSlider.value;
-
-        draggableImg.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scaleSlider.value}) rotate(${rotation}deg)`;
-        draggableImg.style.opacity = opacitySlider.value;
-      }
-      if (textOverlay) {
-        const overlayRect = overlay.getBoundingClientRect();
-        const maxX = overlayRect.width - textOverlay.clientWidth * scaleSlider.value;
-        const maxY = overlayRect.height - textOverlay.clientHeight * scaleSlider.value;
-
-        const translateX = (xPositionSlider.value / 100) * maxX;
-        const translateY = (yPositionSlider.value / 100) * maxY;
-        const rotation = rotationSlider.value;
-
-        textOverlay.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scaleSlider.value}) rotate(${rotation}deg)`;
-        textOverlay.style.opacity = opacitySlider.value;
-        textOverlay.style.fontSize = '200px';
-      }
-    }
-
-    function getCameras() {
-      navigator.mediaDevices.enumerateDevices()
-        .then(devices => {
-          cameraSelect.innerHTML = '';
-
-          const rearCamera = devices.find(device => device.kind === 'videoinput' && device.label.toLowerCase().includes('back'));
-
-          devices.forEach(device => {
-            if (device.kind === 'videoinput') {
-              const option = document.createElement('option');
-              option.value = device.deviceId;
-              option.text = device.label || `Camera ${cameraSelect.length + 1}`;
-              cameraSelect.appendChild(option);
-            }
-          });
-
-          if (rearCamera) {
-            cameraSelect.value = rearCamera.deviceId;
-            startVideo(rearCamera.deviceId);
+        devices.forEach(device => {
+          if (device.kind === 'videoinput') {
+            const option = document.createElement('option');
+            option.value = device.deviceId;
+            option.text = device.label || `Camera ${cameraSelect.length + 1}`;
+            cameraSelect.appendChild(option);
           }
-        })
-        .catch(error => console.error('Error accessing devices:', error));
-    }
+        });
 
-    function startVideo(cameraId) {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-      const constraints = {
-        video: {
-          deviceId: cameraId ? { exact: cameraId } : undefined
+        // 自動選擇預設攝影機
+        if (rearCamera) {
+          cameraSelect.value = rearCamera.deviceId;
+          startVideo(rearCamera.deviceId);
+        } else if (devices[0]) { // 如果沒有後置攝影機，使用第一個攝影機
+          cameraSelect.value = devices[0].deviceId;
+          startVideo(devices[0].deviceId);
         }
-      };
-      navigator.mediaDevices.getUserMedia(constraints)
-        .then(s => {
-          stream = s;
-          video.srcObject = stream;
-        })
-        .catch(error => console.error('Error accessing camera:', error));
+      })
+      .catch(error => console.error('Error accessing devices:', error));
+  }
+
+  function startVideo(cameraId) {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
     }
-
-    function clearOverlayContent() {
-      overlay.innerHTML = '';
-      draggableImg = null;
-      textOverlay = null;
-    }
-
-    pngUpload.addEventListener('change', (event) => {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        clearOverlayContent();
-
-        const img = new Image();
-        img.onload = () => {
-          const imgOverlay = document.createElement('img');
-          imgOverlay.src = e.target.result;
-          imgOverlay.classList.add('draggable');
-          imgOverlay.style.width = '200px';
-          imgOverlay.style.top = `${textInputContainer.offsetHeight + textInputContainer.offsetTop + 10}px`;
-          imgOverlay.style.left = `10px`;
-
-          overlay.appendChild(imgOverlay);
-          draggableImg = imgOverlay;
-
-          scaleSlider.addEventListener('input', updateImagePosition);
-          xPositionSlider.addEventListener('input', updateImagePosition);
-          yPositionSlider.addEventListener('input', updateImagePosition);
-          opacitySlider.addEventListener('input', updateImagePosition);
-          rotationSlider.addEventListener('input', updateImagePosition);
-
-          updateImagePosition();
-        };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
-    });
-
-    addTextButton.addEventListener('click', () => {
-      if (textOverlay) {
-        overlay.removeChild(textOverlay);
+    const constraints = {
+      video: {
+        deviceId: cameraId ? { exact: cameraId } : undefined
       }
+    };
+    navigator.mediaDevices.getUserMedia(constraints)
+      .then(s => {
+        stream = s;
+        video.srcObject = stream;
+      })
+      .catch(error => console.error('Error accessing camera:', error));
+  }
+
+  function clearOverlayContent() {
+    overlay.innerHTML = '';
+    draggableImg = null;
+    textOverlay = null;
+  }
+
+  pngUpload.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
       clearOverlayContent();
-      const text = textInput.value.trim();
-      if (text) {
-        textOverlay = document.createElement('div');
-        textOverlay.innerText = text;
-        textOverlay.classList.add('textOverlay');
-        textOverlay.style.fontFamily = fontSelect.value;
-        textOverlay.style.fontSize = '200px';
-        textOverlay.style.position = 'absolute';
-        textOverlay.style.top = `${textInputContainer.offsetHeight + textInputContainer.offsetTop + 10}px`;
-        textOverlay.style.left = `10px`;
 
-        overlay.appendChild(textOverlay);
-        scaleSlider.addEventListener('input', updateImagePosition);
-        xPositionSlider.addEventListener('input', updateImagePosition);
-        yPositionSlider.addEventListener('input', updateImagePosition);
-        opacitySlider.addEventListener('input', updateImagePosition);
-        rotationSlider.addEventListener('input', updateImagePosition);
+      const img = new Image();
+      img.onload = () => {
+        const imgOverlay = document.createElement('img');
+        imgOverlay.src = e.target.result;
+        imgOverlay.classList.add('draggable');
+        imgOverlay.style.width = '200px';
+        imgOverlay.style.top = `${textInputContainer.offsetHeight + textInputContainer.offsetTop + 10}px`;
+        imgOverlay.style.left = `10px`;
 
-        updateImagePosition();
-      }
-    });
-
-    toggleControls.addEventListener('click', () => {
-      controls.classList.toggle('hidden');
-    });
-
-    toggleInstructions.addEventListener('click', () => {
-      instructions.classList.toggle('hidden');
-      instructions.style.display = instructions.classList.contains('hidden') ? 'none' : 'block';
-    });
-
-    toggleTextInput.addEventListener('click', () => {
-      textInputContainer.classList.toggle('hidden');
-    });
-
-    clearOverlay.addEventListener('click', clearOverlayContent);
-
-    window.addEventListener('load', getCameras);
-  </script>
-</body>
-</html>
+        overlay.appendChild(imgOverlay);
+        d
